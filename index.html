@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Utrecht Time Echo — 原型</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="top">
+      <div>
+        <div class="eyebrow">Utrecht Time Echo</div>
+        <h1>过去与现代 · 时间回响</h1>
+      </div>
+      <div class="status" id="status">加载中…</div>
+    </header>
+
+    <section class="panel timeline">
+      <div class="dial">
+        <div class="dial-ring"></div>
+        <div class="dial-center">
+          <div class="marker marker-modern" id="markerModern">现代</div>
+          <div class="marker marker-past" id="markerPast">过去</div>
+        </div>
+        <div class="dial-labels" id="dialLabels"></div>
+      </div>
+      <div class="slots" id="timeSlots"></div>
+    </section>
+
+    <section class="grid">
+      <div class="panel">
+        <h2>现代组</h2>
+        <div class="row">
+          <div>
+            <div class="label">地点卡</div>
+            <div class="card" id="modernLocation">未选择</div>
+          </div>
+          <div>
+            <div class="label">背包</div>
+            <div class="inventory" id="modernInventory"></div>
+          </div>
+        </div>
+        <div class="actions" id="modernActions"></div>
+      </div>
+
+      <div class="panel">
+        <h2>过去组</h2>
+        <div class="row">
+          <div>
+            <div class="label">地点卡</div>
+            <div class="card" id="pastLocation">未选择</div>
+          </div>
+          <div>
+            <div class="label">背包</div>
+            <div class="inventory" id="pastInventory"></div>
+          </div>
+        </div>
+        <div class="actions" id="pastActions"></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>地点卡</h2>
+      <div class="locations" id="locationList"></div>
+    </section>
+
+    <section class="panel">
+      <h2>事件记录</h2>
+      <div class="log" id="eventLog"></div>
+    </section>
+
+    <footer class="footer">
+      <button class="btn ghost" id="resetBtn">重置游戏</button>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

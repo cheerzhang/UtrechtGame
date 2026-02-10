@@ -351,6 +351,8 @@ const state = {
   auto: { running: false, timer: null, interval: 1200 },
   bellTriggered: { modern: false, past: false },
   blockItemModsRound: { modern: false, past: false },
+  totalDraws: 0,
+  totalRounds: 0,
 };
 
 const elements = {
@@ -570,6 +572,7 @@ function drawEvent(team) {
   state.blockItemMods[team] = false;
   applyLocationEffectAfterEvent(team);
   state.eventDrawn[team] = true;
+  state.totalDraws += 1;
   if (state.extraShift[team]) {
     shiftTime(team, state.extraShift[team]);
     state.extraShift[team] = 0;
@@ -718,6 +721,7 @@ function resetRound() {
   state.blockItemModsRound.modern = false;
   state.blockItemModsRound.past = false;
   state.lockBy = null;
+  state.totalRounds += 1;
   if (state.travelCooldown.past > 0) state.travelCooldown.past -= 1;
   state.roundStats = { modern: { gained: 0, lost: 0 }, past: { gained: 0, lost: 0 } };
   state.phase = state.nextFirst === "modern" ? "modern_pick" : "past_pick";
@@ -748,7 +752,7 @@ function locationSelectable(team, name) {
 function render() {
   normalizeBells();
   elements.status.textContent = state.winner
-    ? `${label(state.winner)}获胜！点击重置开始新局。`
+    ? `钟声共振成功 · 抽卡${state.totalDraws}张 · 时间过${state.totalRounds}轮`
     : `回合阶段：${phaseLabel(state.phase)} · 时间同步：${state.time.modern === state.time.past ? "是" : "否"}`;
 
   renderPlayerStatus();
@@ -1551,6 +1555,8 @@ function resetGame() {
   state.eventDrawn = { modern: false, past: false };
   state.bellTriggered = { modern: false, past: false };
   state.blockItemModsRound = { modern: false, past: false };
+  state.totalDraws = 0;
+  state.totalRounds = 0;
   logEntry("新游戏开始。现代与过去同在清晨。\n");
   render();
 }

@@ -345,6 +345,34 @@ h2 {
   min-height: 120px;
   display: grid;
   gap: 8px;
+  position: relative;
+  overflow: hidden;
+}
+
+.event-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: rgba(92, 87, 82, 0.45);
+}
+
+.event-card--past {
+  border-color: rgba(63, 91, 74, 0.38);
+  background: linear-gradient(165deg, #f6faf4 0%, #e9f1e8 100%);
+}
+
+.event-card--past::before {
+  background: #3f5b4a;
+}
+
+.event-card--modern {
+  border-color: rgba(46, 78, 92, 0.38);
+  background: linear-gradient(165deg, #f4f8fa 0%, #e7eef2 100%);
+}
+
+.event-card--modern::before {
+  background: #2e4e5c;
 }
 
 .event-meta {
@@ -352,6 +380,17 @@ h2 {
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--muted);
+}
+
+.event-tone {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  background: rgba(29, 27, 26, 0.08);
+  color: #3a3734;
 }
 
 .event-title {

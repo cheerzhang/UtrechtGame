@@ -40,6 +40,7 @@ const locations = [
 ];
 
 const items = ["石头", "文件", "钥匙", "铃铛"];
+const RECORDER_STORAGE_KEY = "utrecht_manual_strategy_records_v1";
 
 const eventDeck = [
   {
@@ -324,6 +325,10 @@ const eventDeck = [
     },
   },
 ];
+const PAST_EVENT_COUNT = 12;
+eventDeck.forEach((card, idx) => {
+  card.targetTeam = idx < PAST_EVENT_COUNT ? "past" : "modern";
+});
 
 const state = {
   time: { modern: 0, past: 0 },
@@ -355,6 +360,8 @@ const state = {
   blockItemModsRound: { modern: false, past: false },
   totalDraws: 0,
   totalRounds: 0,
+  beforeEventApplied: { modern: false, past: false },
+  recorder: { enabled: false, sessionId: null, records: [], exportHandle: null },
 };
 
 const elements = {
@@ -384,6 +391,11 @@ const elements = {
   autoToggleBtn: document.getElementById("autoToggleBtn"),
   autoResetBtn: document.getElementById("autoResetBtn"),
   autoSteps: document.getElementById("autoSteps"),
+  recorderStatus: document.getElementById("recorderStatus"),
+  recorderToggleBtn: document.getElementById("recorderToggleBtn"),
+  recorderExportBtn: document.getElementById("recorderExportBtn"),
+  recorderClearBtn: document.getElementById("recorderClearBtn"),
+  recorderMeta: document.getElementById("recorderMeta"),
 };
 
 function initDial() {
@@ -400,6 +412,159 @@ function initDial() {
 function logEntry(text) {
   state.log.unshift({ text, ts: new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }) });
   if (state.log.length > 20) state.log.pop();
+}
+
+function newRecorderSessionId() {
+  return `session_${Date.now()}`;
+}
+
+function itemCounts(list) {
+  const counts = { 石头: 0, 文件: 0, 钥匙: 0, 铃铛: 0 };
+  list.forEach((item) => {
+    if (counts[item] !== undefined) counts[item] += 1;
+  });
+  return counts;
+}
+
+function recorderSnapshot() {
+  return {
+    phase: state.phase,
+    winner: state.winner,
+    time: { ...state.time },
+    location: { ...state.location },
+    playerPos: {
+      modern: { ...state.playerPos.modern },
+      past: { ...state.playerPos.past },
+    },
+    inventory: {
+      modern: [...state.inventory.modern],
+      past: [...state.inventory.past],
+    },
+    inventoryCounts: {
+      modern: itemCounts(state.inventory.modern),
+      past: itemCounts(state.inventory.past),
+    },
+    pendingChoice: {
+      modern: state.pendingChoice.modern ? state.pendingChoice.modern.type : null,
+      past: state.pendingChoice.past ? state.pendingChoice.past.type : null,
+    },
+    totalDraws: state.totalDraws,
+    totalRounds: state.totalRounds,
+  };
+}
+
+function saveRecorderData() {
+  try {
+    localStorage.setItem(
+      RECORDER_STORAGE_KEY,
+      JSON.stringify({
+        sessionId: state.recorder.sessionId,
+        records: state.recorder.records,
+      })
+    );
+  } catch (_err) {}
+}
+
+function loadRecorderData() {
+  try {
+    const raw = localStorage.getItem(RECORDER_STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    state.recorder.sessionId = parsed && parsed.sessionId ? parsed.sessionId : null;
+    state.recorder.records = Array.isArray(parsed && parsed.records) ? parsed.records : [];
+  } catch (_err) {
+    state.recorder.sessionId = null;
+    state.recorder.records = [];
+  }
+}
+
+function renderRecorderStatus() {
+  if (!elements.recorderStatus) return;
+  const count = state.recorder.records.length;
+  elements.recorderStatus.textContent = state.recorder.enabled ? "记录中" : "未记录";
+  if (elements.recorderToggleBtn) {
+    elements.recorderToggleBtn.textContent = state.recorder.enabled ? "停止记录" : "开始记录";
+  }
+  if (elements.recorderMeta) {
+    const sid = state.recorder.sessionId || "-";
+    elements.recorderMeta.textContent = `记录条数：${count} · 会话：${sid}`;
+  }
+}
+
+function recordManualAction(team, action, data, before, after) {
+  if (!state.recorder.enabled) return;
+  const entry = {
+    id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    ts: new Date().toISOString(),
+    sessionId: state.recorder.sessionId,
+    team,
+    action,
+    choice: data && data.choice ? data.choice : null,
+    item: data && data.item ? data.item : null,
+    location: data && data.location ? data.location : null,
+    before,
+    after,
+  };
+  state.recorder.records.push(entry);
+  if (state.recorder.records.length > 5000) state.recorder.records.shift();
+  saveRecorderData();
+}
+
+async function exportRecorderData() {
+  if (!state.recorder.records.length) {
+    logEntry("暂无策略记录可导出。");
+    render();
+    return false;
+  }
+  const exportedAt = new Date().toISOString();
+  const payload = {
+    exportedAt,
+    totalRecords: state.recorder.records.length,
+    sessionId: state.recorder.sessionId,
+    records: state.recorder.records,
+  };
+  const content = JSON.stringify(payload, null, 2);
+  if (window.showSaveFilePicker) {
+    try {
+      if (!state.recorder.exportHandle) {
+        state.recorder.exportHandle = await window.showSaveFilePicker({
+          suggestedName: "manual_strategy_records.latest.json",
+          types: [
+            {
+              description: "JSON Files",
+              accept: { "application/json": [".json"] },
+            },
+          ],
+        });
+      }
+      const writable = await state.recorder.exportHandle.createWritable();
+      await writable.write(content);
+      await writable.close();
+      logEntry(`已写入项目记录文件：${state.recorder.exportHandle.name}。`);
+      render();
+      return true;
+    } catch (err) {
+      if (err && err.name === "AbortError") {
+        logEntry("已取消文件写入。");
+        render();
+        return false;
+      }
+      state.recorder.exportHandle = null;
+    }
+  }
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const stamp = exportedAt.replace(/[:.]/g, "-");
+  a.href = url;
+  a.download = `manual_strategy_records_${stamp}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  logEntry(`已下载策略记录（${payload.totalRecords}条）。`);
+  render();
+  return true;
 }
 
 function otherTeam(team) {
@@ -464,7 +629,9 @@ function hasBellAny(team) {
 }
 
 function hasBasicSupplies() {
-  return true;
+  const hasAll = (team) =>
+    hasItem(team, "石头") && hasItem(team, "文件") && hasItem(team, "钥匙");
+  return hasAll("modern") && hasAll("past");
 }
 
 function loseRandomItem(team) {
@@ -557,10 +724,13 @@ function label(team) {
 }
 
 function drawEvent(team) {
-  applyLocationEffectBeforeEvent(team);
-  if (state.pendingChoice[team]) return;
+  if (state.pendingChoice.modern || state.pendingChoice.past) return;
   const card = eventDeck[Math.floor(Math.random() * eventDeck.length)];
+  const actorTeam = card.targetTeam || team;
   logEntry(`${label(team)}抽到事件：${card.title}（${card.text}）`);
+  if (actorTeam !== team) {
+    logEntry(`该事件由${label(actorTeam)}立即执行（不等待轮次）。`);
+  }
   state.lastEvent[team] = card;
   state.inEvent = true;
   if (state.noModifyNextEvent[team]) {
@@ -568,7 +738,7 @@ function drawEvent(team) {
     state.noModifyNextEvent[team] = false;
     logEntry(`${label(team)}本次事件无法被修改。`);
   }
-  card.effect(team);
+  card.effect(actorTeam);
   state.inEvent = false;
   state.blockItemMods[team] = false;
   applyLocationEffectAfterEvent(team);
@@ -600,10 +770,6 @@ function ringBell(team) {
   state.bellTriggered[team] = true;
   if (!teamOnHomeTimeline(team)) {
     logEntry(`${label(team)}有人不在自己的时间线，无法获胜。`);
-    return;
-  }
-  if (!hasBasicSupplies()) {
-    logEntry("物资未齐备：现代与过去需各有石头、钥匙、文件。");
     return;
   }
   const opponent = otherTeam(team);
@@ -660,6 +826,16 @@ function applyLocationEffectBeforeEvent(team) {
       logEntry("现代组可穿越到过去（可带1件物品）。");
     }
   }
+  if (loc === "Dom Tower｜钟塔") {
+    if (team === "past" && state.inventory.past.includes("石头") && state.inventory.past.includes("文件")) {
+      state.pendingChoice.past = { type: "domtower_past_bell" };
+      logEntry("钟塔：过去组可获得铃铛。");
+    }
+    if (team === "modern" && state.inventory.modern.includes("钥匙")) {
+      state.pendingChoice.modern = { type: "domtower_modern_ring" };
+      logEntry("钟塔：现代组可触发一次铃铛声。");
+    }
+  }
 }
 
 function applyLocationEffectAfterEvent(team) {
@@ -689,8 +865,11 @@ function applyLocationEffectAfterEvent(team) {
       }
     }
     if (team === "modern") {
-      state.pendingChoice.modern = { type: "museum_modern_gain" };
-      logEntry("现代组可在博物馆获得文件，但可能需要弃一件物品。");
+      const hadTwo = countItem(team, "文件") >= 2;
+      addItem(team, "文件");
+      if (hadTwo) {
+        state.pendingChoice[team] = { type: "discard_any" };
+      }
     }
   }
   if (loc === "Dom Square｜广场") {
@@ -703,16 +882,18 @@ function applyLocationEffectAfterEvent(team) {
       logEntry("广场：现代组本轮失去物品，可触发一次铃铛声。");
     }
   }
-  if (loc === "Dom Tower｜钟塔") {
-    if (team === "past" && state.inventory.past.includes("石头") && state.inventory.past.includes("文件")) {
-      state.pendingChoice.past = { type: "domtower_past_bell" };
-      logEntry("钟塔：过去组可获得铃铛。");
-    }
-    if (team === "modern" && state.inventory.modern.includes("钥匙")) {
-      state.pendingChoice.modern = { type: "domtower_modern_ring" };
-      logEntry("钟塔：现代组可触发一次铃铛声。");
-    }
-  }
+  if (loc === "Dom Tower｜钟塔") return;
+}
+
+function hasPreEventLocationAction(team) {
+  const loc = state.location[team];
+  return loc === "Archive｜档案馆" || loc === "Workshop｜工坊" || loc === "Dom Tower｜钟塔";
+}
+
+function triggerPreEventLocationAction(team) {
+  if (state.beforeEventApplied[team]) return;
+  applyLocationEffectBeforeEvent(team);
+  state.beforeEventApplied[team] = true;
 }
 
 function resetRound() {
@@ -742,6 +923,7 @@ function endTurn(team) {
 function enterEventPhase(team) {
   state.phase = team === "modern" ? "modern_event" : "past_event";
   state.eventDrawn[team] = false;
+  state.beforeEventApplied[team] = false;
 }
 
 function locationSelectable(team, name) {
@@ -749,6 +931,13 @@ function locationSelectable(team, name) {
   if (state.location[other] === name) return false;
   if (state.lockBy && state.lockBy !== team && state.location[other] === name) return false;
   return true;
+}
+
+function locationTimingLabel(name) {
+  if (name === "Archive｜档案馆" || name === "Workshop｜工坊" || name === "Dom Tower｜钟塔") {
+    return "前置可主动";
+  }
+  return "后置自动（事件后）";
 }
 
 function render() {
@@ -759,6 +948,7 @@ function render() {
 
   renderPlayerStatus();
   renderAutoSteps();
+  renderRecorderStatus();
 
   elements.timeSlots.innerHTML = timeSlots
     .map((slot, i) => {
@@ -796,6 +986,7 @@ function render() {
             <div><span class="chip">过去</span>${loc.past || "待定"}</div>
             <div><span class="chip">现代</span>${loc.modern || "待定"}</div>
           </div>
+          <div class="chip">结算：${locationTimingLabel(loc.name)}</div>
           ${who ? `<div class="chip">已被${who}翻开</div>` : ""}
         </div>
       `;
@@ -845,6 +1036,7 @@ function renderPlayerStatus() {
 
 function renderEventCard(target, teamLabel, card) {
   if (!target) return;
+  target.className = "event-card";
   if (!card) {
     target.innerHTML = `
       <div class="event-meta">${teamLabel}</div>
@@ -853,8 +1045,11 @@ function renderEventCard(target, teamLabel, card) {
     `;
     return;
   }
+  const timeline = card.targetTeam === "past" ? "过去事件" : "现代事件";
+  const toneClass = card.targetTeam === "past" ? "event-card--past" : "event-card--modern";
+  target.classList.add(toneClass);
   target.innerHTML = `
-    <div class="event-meta">${teamLabel}</div>
+    <div class="event-meta">${teamLabel} · <span class="event-tone">${timeline}</span></div>
     <div class="event-title">${card.title}</div>
     <div class="event-text">${card.text}</div>
   `;
@@ -878,7 +1073,11 @@ function renderActions(team) {
   const canAct = !state.winner && ((isModern && state.phase.startsWith("modern")) || (!isModern && state.phase.startsWith("past")));
   const canPick = canAct && state.phase.endsWith("pick");
   const canEvent = canAct && state.phase.endsWith("event") && !state.eventDrawn[team];
+  const canDoPreLocation = canEvent && !state.beforeEventApplied[team] && hasPreEventLocationAction(team);
+  const canNext = canAct && (state.phase.endsWith("pick") || state.eventDrawn[team]);
   const pendingChoice = state.pendingChoice[team];
+  const currentLoc = state.location[team];
+  const timingHint = currentLoc ? `${currentLoc}：${locationTimingLabel(currentLoc)}` : null;
 
   if (!state.configured) {
     return `<div class="label">请先在上方设置玩家人数。</div>`;
@@ -889,9 +1088,11 @@ function renderActions(team) {
   }
 
   return `
+    ${timingHint ? `<div class="label">地点结算：${timingHint}</div>` : ""}
     <button class="btn" data-action="pick" data-team="${team}" ${canPick ? "" : "disabled"}>选择地点</button>
+    <button class="btn alt" data-action="loc-effect" data-team="${team}" ${canDoPreLocation ? "" : "disabled"}>执行地点效果</button>
     <button class="btn alt" data-action="event" data-team="${team}" ${canEvent ? "" : "disabled"}>抽事件卡</button>
-    <button class="btn ghost" data-action="next" data-team="${team}" ${canAct ? "" : "disabled"}>结束行动</button>
+    <button class="btn ghost" data-action="next" data-team="${team}" ${canNext ? "" : "disabled"}>结束行动</button>
     ${canPick ? renderLocationButtons(team) : ""}
   `;
 }
@@ -919,35 +1120,40 @@ function bindActions() {
 function handleAction(action, team, data) {
   if (state.winner) return;
   if (state.auto.running) return;
+  const trackable = action !== "pick";
+  const before = trackable && state.recorder.enabled ? recorderSnapshot() : null;
+  let handled = false;
+
   if (action === "choice") {
     handleChoice(team, data.choice, data.item);
-    render();
-    return;
-  }
-  if (action === "pick") {
-    return;
-  }
-  if (action === "pick-location") {
+    handled = true;
+  } else if (action === "pick-location") {
     pickLocation(team, data.location);
     enterEventPhase(team);
-    render();
-    return;
-  }
-  if (action === "event") {
+    handled = true;
+  } else if (action === "loc-effect") {
+    if (!state.phase.endsWith("event") || state.eventDrawn[team]) return;
+    triggerPreEventLocationAction(team);
+    handled = true;
+  } else if (action === "event") {
     if (state.eventDrawn[team]) return;
     drawEvent(team);
-    render();
-    return;
-  }
-  if (action === "bell") {
+    handled = true;
+  } else if (action === "bell") {
     ringBell(team);
-    render();
+    handled = true;
+  } else if (action === "next") {
+    endTurn(team);
+    handled = true;
+  } else if (action === "pick") {
     return;
   }
-  if (action === "next") {
-    endTurn(team);
-    render();
+
+  if (handled && state.recorder.enabled && before) {
+    const after = recorderSnapshot();
+    recordManualAction(team, action, data, before, after);
   }
+  if (handled) render();
 }
 
 function renderLocationButtons(team) {
@@ -1541,7 +1747,7 @@ function canWinNow(team) {
   const opponentDom =
     state.location[opponent] === "Dom Tower｜钟塔" || state.location[opponent] === "Dom Square｜广场";
   const sameTime = state.time[team] === state.time[opponent];
-  return hasBellAny(team) && opponentDom && sameTime && teamOnHomeTimeline(team) && hasBasicSupplies();
+  return hasBellAny(team) && opponentDom && sameTime && teamOnHomeTimeline(team);
 }
 
 function travelOne(team, toTimeline) {
@@ -1627,12 +1833,14 @@ function resetGame() {
   state.eventDrawn = { modern: false, past: false };
   state.bellTriggered = { modern: false, past: false };
   state.blockItemModsRound = { modern: false, past: false };
+  state.beforeEventApplied = { modern: false, past: false };
   state.totalDraws = 0;
   state.totalRounds = 0;
   logEntry("新游戏开始。现代与过去同在清晨。\n");
   render();
 }
 
+loadRecorderData();
 initDial();
 resetGame();
 
@@ -1647,7 +1855,9 @@ elements.applyPlayersBtn.addEventListener("click", () => {
 });
 
 function autoResolveChoice(team, pending) {
-  const collectPhase = !hasBasicSupplies();
+  const rushWinReady =
+    hasBellAny("modern") && hasItem("modern", "钥匙") && teamOnHomeTimeline("modern") && teamOnHomeTimeline("past");
+  const collectPhase = !hasBasicSupplies() && !rushWinReady;
   const slots = timeSlots.length;
   const deltaModern = (state.time.modern - state.time.past + slots) % slots;
   const pastAhead = deltaModern === 4;
@@ -1664,12 +1874,19 @@ function autoResolveChoice(team, pending) {
     opponentAtDom &&
     teamOnHomeTimeline("modern") &&
     hasBasicSupplies();
+  const fastWinReady = rushWinReady && timeSynced;
   const stoneSafe =
     countItem(team, "石头") >= 2 || (team === "modern" ? hasItem("past", "石头") : hasItem("modern", "石头"));
   const fileSafe =
     countItem(team, "文件") >= 2 || (team === "modern" ? hasItem("past", "文件") : hasItem("modern", "文件"));
   const keySafe =
     countItem(team, "钥匙") >= 2 || (team === "modern" ? hasItem("past", "钥匙") : hasItem("modern", "钥匙"));
+  const pickForModern = (items) => {
+    if (!items.length) return null;
+    if (!hasBellAny("modern") && items.includes("铃铛")) return "铃铛";
+    if (items.includes("钥匙")) return "钥匙";
+    return items[Math.floor(Math.random() * items.length)];
+  };
   if (pending.type === "domsquare_modern_ring") {
     if (hasBellAny(team) && canWinNow(team)) return handleChoice(team, "ring");
     return handleChoice(team, "skip");
@@ -1680,14 +1897,15 @@ function autoResolveChoice(team, pending) {
   }
   if (pending.type === "canal_past_gain") return handleChoice(team, "gain");
   if (pending.type === "canal_modern_gain") {
-    const needStone = !hasItem("modern", "石头") && !hasItem("past", "石头");
+    const needStone = !hasItem("modern", "石头") || !hasItem("past", "石头");
+    if (rushWinReady) return handleChoice(team, "skip");
     if (needStone || (deltaModern >= 1 && deltaModern <= 3)) return handleChoice(team, "gain");
     if (!timeSynced && pastAhead) return handleChoice(team, "skip");
     return handleChoice(team, "gain");
   }
-  if (pending.type === "museum_modern_gain") return handleChoice(team, "gain");
+  if (pending.type === "museum_modern_gain") return handleChoice(team, rushWinReady ? "skip" : "gain");
   if (pending.type === "archive_past_convert") return handleChoice(team, "convert");
-  if (pending.type === "archive_modern_convert") return handleChoice(team, "convert");
+  if (pending.type === "archive_modern_convert") return handleChoice(team, rushWinReady ? "skip" : "convert");
   if (pending.type === "workshop_past_travel") return handleChoice(team, "skip");
   if (pending.type === "workshop_modern_travel") return handleChoice(team, "skip");
   if (pending.type === "workshop_modern_item") {
@@ -1749,13 +1967,16 @@ function autoResolveChoice(team, pending) {
     return handleChoice(team, "keep_bell");
   }
   if (pending.type === "event_build_continue_choice") {
+    if (rushWinReady) return handleChoice(team, "skip");
     if (team === "past" && hasBellAny("past") && !hasBellAny("modern")) return handleChoice(team, "travel_item");
+    const carryToModern = !hasItem("modern", "石头") || !hasItem("modern", "文件") || !hasItem("modern", "钥匙");
+    if (team === "past" && carryToModern && state.inventory.past.length) return handleChoice(team, "travel_item");
     return handleChoice(team, "skip");
   }
   if (pending.type === "event_build_continue_item") {
     const items = state.inventory[team];
     if (items.length) {
-      if (items.includes("铃铛") && team === "past" && !hasBellAny("modern")) return handleChoice(team, "carry", "铃铛");
+      if (team === "past") return handleChoice(team, "carry", pickForModern(items));
       return handleChoice(team, "carry", items[Math.floor(Math.random() * items.length)]);
     }
     return;
@@ -1770,7 +1991,10 @@ function autoResolveChoice(team, pending) {
     return;
   }
   if (pending.type === "event_memory_choice") {
+    if (rushWinReady) return handleChoice(team, "gain_bell");
     if (team === "past" && hasBellAny("past") && !hasBellAny("modern")) return handleChoice(team, "travel_item");
+    const carryToModern = !hasItem("modern", "石头") || !hasItem("modern", "文件") || !hasItem("modern", "钥匙");
+    if (team === "past" && carryToModern && state.inventory.past.length) return handleChoice(team, "travel_item");
     if (!hasBellAny("modern") && !hasBellAny("past")) return handleChoice(team, "gain_bell");
     return handleChoice(team, "gain_bell");
   }
@@ -1781,7 +2005,7 @@ function autoResolveChoice(team, pending) {
   if (pending.type === "event_memory_item") {
     const items = state.inventory[team];
     if (items.length) {
-      if (items.includes("铃铛") && team === "past" && !hasBellAny("modern")) return handleChoice(team, "carry", "铃铛");
+      if (team === "past") return handleChoice(team, "carry", pickForModern(items));
       return handleChoice(team, "carry", items[Math.floor(Math.random() * items.length)]);
     }
     return;
@@ -1795,14 +2019,17 @@ function autoResolveChoice(team, pending) {
     return handleChoice(team, "gain_stone");
   }
   if (pending.type === "event_city_error_choice") {
+    if (rushWinReady) return handleChoice(team, countItem(team, "石头") >= 1 ? "lose_stone" : "send_item");
     if (team === "past" && hasBellAny("past") && !hasBellAny("modern")) return handleChoice(team, "send_item");
+    const carryToModern = !hasItem("modern", "石头") || !hasItem("modern", "文件") || !hasItem("modern", "钥匙");
+    if (team === "past" && carryToModern) return handleChoice(team, "send_item");
     if (stoneSafe) return handleChoice(team, "lose_stone");
     return handleChoice(team, "send_item");
   }
   if (pending.type === "event_city_error_item") {
     const items = state.inventory[team];
     if (items.length) {
-      if (items.includes("铃铛") && team === "past" && !hasBellAny("modern")) return handleChoice(team, "carry", "铃铛");
+      if (team === "past") return handleChoice(team, "carry", pickForModern(items));
       return handleChoice(team, "carry", items[Math.floor(Math.random() * items.length)]);
     }
     return;
@@ -1812,6 +2039,7 @@ function autoResolveChoice(team, pending) {
     const others = state.inventory[team].filter((item) => item !== "文件");
     if (!others.length) return handleChoice(team, "skip");
     if (!hasBellAny("modern") && others.includes("铃铛")) return handleChoice(team, "carry", "铃铛");
+    if (others.includes("钥匙")) return handleChoice(team, "carry", "钥匙");
     return handleChoice(team, "skip");
   }
 }
@@ -1829,22 +2057,27 @@ function autoTick() {
     return;
   }
   const team = state.phase.startsWith("modern") ? "modern" : "past";
-  const pending = state.pendingChoice[team];
-  if (pending) {
-    autoResolveChoice(team, pending);
+  const pendingTeam = state.pendingChoice[team] ? team : state.pendingChoice[otherTeam(team)] ? otherTeam(team) : null;
+  if (pendingTeam) {
+    autoResolveChoice(pendingTeam, state.pendingChoice[pendingTeam]);
     render();
     return;
   }
   if (state.phase.endsWith("pick")) {
     const choices = locations.filter((loc) => locationSelectable(team, loc.name));
-    const collectPhase = false;
-    const needStone = !hasItem("modern", "石头") && !hasItem("past", "石头");
-    const needFile = !hasItem("modern", "文件") && !hasItem("past", "文件");
-    const needKey = !hasItem("modern", "钥匙") && !hasItem("past", "钥匙");
+    const homeReady = teamOnHomeTimeline("modern") && teamOnHomeTimeline("past");
+    const rushWinReady = hasBellAny("modern") && hasItem("modern", "钥匙") && homeReady;
+    const collectPhase = !hasBasicSupplies() && !rushWinReady;
+    const needStoneAny = !hasItem("modern", "石头") || !hasItem("past", "石头");
+    const needFileAny = !hasItem("modern", "文件") || !hasItem("past", "文件");
+    const needKeyAny = !hasItem("modern", "钥匙") || !hasItem("past", "钥匙");
+    const needStoneTeam = team === "modern" ? !hasItem("modern", "石头") : !hasItem("past", "石头");
+    const needFileTeam = team === "modern" ? !hasItem("modern", "文件") : !hasItem("past", "文件");
+    const needKeyTeam = team === "modern" ? !hasItem("modern", "钥匙") : !hasItem("past", "钥匙");
     const modernHasBell = hasBellAny("modern");
     const pastHasBell = hasBellAny("past");
-    const homeReady = teamOnHomeTimeline("modern") && teamOnHomeTimeline("past");
-    const readySetupModern = hasBasicSupplies() && modernHasBell && homeReady;
+    const earlyBell = !modernHasBell;
+    const readySetupModern = rushWinReady;
     const readySetupPast = hasBasicSupplies() && pastHasBell && homeReady;
     const timesSynced = state.time.modern === state.time.past;
     const slots = timeSlots.length;
@@ -1856,18 +2089,60 @@ function autoTick() {
     const domTargetBoost = 16;
     const domSelfPenalty = 6;
     const winReady = readySetupModern;
-    const fastPlan = winReady && hasItem("modern", "钥匙");
-    const planModern = winReady ? (fastPlan ? "Dom Tower｜钟塔" : "Dom Square｜广场") : null;
-    const planPast = winReady ? (fastPlan ? "Dom Square｜广场" : "Dom Tower｜钟塔") : null;
+    const planModern = winReady ? "Dom Tower｜钟塔" : null;
+    const planPast = winReady ? "Dom Square｜广场" : null;
+    if (earlyBell) {
+      if (team === "past") {
+        const hasTower = choices.some((loc) => loc.name === "Dom Tower｜钟塔");
+        const hasSquare = choices.some((loc) => loc.name === "Dom Square｜广场");
+        if (hasTower) {
+          pickLocation(team, "Dom Tower｜钟塔");
+          enterEventPhase(team);
+          render();
+          return;
+        }
+        if (hasSquare) {
+          pickLocation(team, "Dom Square｜广场");
+          enterEventPhase(team);
+          render();
+          return;
+        }
+      }
+      if (team === "modern") {
+        if (choices.some((loc) => loc.name === "Dom Square｜广场")) {
+          pickLocation(team, "Dom Square｜广场");
+          enterEventPhase(team);
+          render();
+          return;
+        }
+      }
+    }
+
+    if (winReady && timesSynced) {
+      if (team === "modern" && choices.some((loc) => loc.name === "Dom Tower｜钟塔")) {
+        pickLocation(team, "Dom Tower｜钟塔");
+        enterEventPhase(team);
+        render();
+        return;
+      }
+      if (team === "past" && choices.some((loc) => loc.name === "Dom Square｜广场")) {
+        pickLocation(team, "Dom Square｜广场");
+        enterEventPhase(team);
+        render();
+        return;
+      }
+    }
+
     const scoreLocation = (loc) => {
       let score = 0;
       const wantDomForOpponent =
         (readySetupModern && team === "past") || (readySetupPast && team === "modern");
       const preferSync = !collectPhase && !timesSynced;
       if (readySetupModern) {
-        if (team === "past" && loc.name === "Dom Tower｜钟塔") score += 18;
-        if (team === "modern" && loc.name === "Dom Square｜广场") score += 16;
-        if (team === "modern" && loc.name === "Dom Tower｜钟塔") score -= 12;
+        if (team === "modern" && loc.name === "Dom Tower｜钟塔") score += 30;
+        if (team === "past" && loc.name === "Dom Square｜广场") score += 30;
+        if (team === "modern" && loc.name === "Dom Square｜广场") score -= 10;
+        if (team === "past" && loc.name === "Dom Tower｜钟塔") score -= 10;
       }
       if (readySetupPast) {
         if (team === "modern" && loc.name === "Dom Square｜广场") score += 10;
@@ -1879,25 +2154,19 @@ function autoTick() {
         if (team === "modern" && loc.name === planPast) score -= 12;
         if (team === "past" && loc.name === planModern) score -= 12;
       }
+      if (winReady && timesSynced) {
+        if (team === "modern" && loc.name === "Dom Tower｜钟塔") score += 24;
+        if (team === "past" && loc.name === "Dom Square｜广场") score += 24;
+      }
       if (collectPhase) {
-        if (loc.name === "Canal｜运河" && needStone) score += 6;
-        if (loc.name === "Museum｜博物馆" && needFile && team === "modern") score += 6;
-        if (loc.name === "Archive｜档案馆" && needKey && team === "modern" && countItem(team, "文件") >= 1) score += 6;
-        if (loc.name === "Archive｜档案馆" && team === "past" && countItem(team, "石头") >= 1) score += 4;
-        if (loc.name === "Dom Tower｜钟塔") score -= 2;
-        if (loc.name === "Workshop｜工坊") score -= 2;
-      }
-      if (!modernHasBell) {
-        if (team === "past" && !pastHasBell && (loc.name === "Dom Square｜广场" || loc.name === "Dom Tower｜钟塔")) {
-          score += 6;
+        if (loc.name === "Canal｜运河" && needStoneTeam) score += 1;
+        if (loc.name === "Museum｜博物馆" && needFileTeam && team === "modern") score += 1;
+        if (loc.name === "Archive｜档案馆" && team === "modern" && countItem(team, "文件") >= 1) {
+          score += needKeyTeam ? 8 : 4;
         }
-        if (team === "past" && pastHasBell && loc.name === "Workshop｜工坊") score += 8;
-      }
-      if (!modernHasBell && !pastHasBell && team === "past" && loc.name === "Dom Tower｜钟塔") {
-        score += 20;
-      }
-      if (!modernHasBell && pastHasBell && team === "past" && loc.name === "Workshop｜工坊") {
-        score += 20;
+        if (loc.name === "Archive｜档案馆" && needFileTeam && team === "past" && countItem(team, "石头") >= 1) score += 1;
+        if (loc.name === "Dom Tower｜钟塔") score -= 4;
+        if (loc.name === "Workshop｜工坊") score -= 6;
       }
       if (!timesSynced) {
         if (team === "modern" && deltaModern >= 1 && deltaModern <= 3 && loc.name === "Canal｜运河") score += 5;
@@ -1914,19 +2183,24 @@ function autoTick() {
       if (loc.name === "Dom Square｜广场") {
         if (wantDomForOpponent) score += domTargetBoost;
       }
+      if (winReady && !timesSynced) {
+        if (team === "modern" && loc.name === "Dom Tower｜钟塔") score += 10;
+        if (team === "past" && loc.name === "Dom Square｜广场") score += 10;
+      }
       if (loc.name === "Workshop｜工坊" && team === "past" && hasBellAny("past") && !hasBellAny("modern")) {
-        score += 6;
+        score += 16;
       }
       if (loc.name === "Archive｜档案馆") {
         if (team === "past" && countItem(team, "石头") >= 1) score += 3;
         if (team === "modern" && countItem(team, "文件") >= 1) score += 3;
+        if (team === "modern" && !hasItem("modern", "钥匙") && countItem(team, "文件") >= 1) score += 6;
       }
-      if (loc.name === "Museum｜博物馆" && team === "modern") score += 2;
+      if (loc.name === "Museum｜博物馆" && team === "modern" && (needFileAny || collectPhase)) score += 2;
       if (loc.name === "Canal｜运河") score += 1;
       if (loc.name === "Dom Square｜广场") score += 1;
       if (loc.name === "Workshop｜工坊") score += 1;
       if (preferSync && loc.name === "Dom Square｜广场") score += 2;
-      if (readyToRing && team === "modern" && loc.name === "Dom Square｜广场") score += 14;
+      if (readyToRing && team === "modern" && loc.name === "Dom Tower｜钟塔") score += 28;
       if (!modernHasBell && team === "past" && loc.name === "Dom Tower｜钟塔") score += 2;
       return score;
     };
@@ -1953,6 +2227,11 @@ function autoTick() {
     return;
   }
   if (state.phase.endsWith("event")) {
+    if (!state.beforeEventApplied[team] && hasPreEventLocationAction(team)) {
+      triggerPreEventLocationAction(team);
+      render();
+      return;
+    }
     if (!state.eventDrawn[team]) {
       drawEvent(team);
       render();
@@ -1988,3 +2267,35 @@ elements.autoResetBtn.addEventListener("click", () => {
   stopAuto();
   resetGame();
 });
+
+if (elements.recorderToggleBtn) {
+  elements.recorderToggleBtn.addEventListener("click", () => {
+    state.recorder.enabled = !state.recorder.enabled;
+    if (state.recorder.enabled) {
+      state.recorder.sessionId = newRecorderSessionId();
+    }
+    if (state.recorder.enabled) {
+      logEntry(`策略记录已开启（会话：${state.recorder.sessionId}）。`);
+    } else {
+      logEntry("策略记录已停止。");
+    }
+    saveRecorderData();
+    render();
+  });
+}
+
+if (elements.recorderExportBtn) {
+  elements.recorderExportBtn.addEventListener("click", async () => {
+    await exportRecorderData();
+  });
+}
+
+if (elements.recorderClearBtn) {
+  elements.recorderClearBtn.addEventListener("click", () => {
+    state.recorder.records = [];
+    state.recorder.sessionId = state.recorder.enabled ? newRecorderSessionId() : null;
+    saveRecorderData();
+    logEntry("策略记录已清空。");
+    render();
+  });
+}

@@ -713,6 +713,8 @@ class HeuristicPolicy:
         need_key = (not has_item("modern", "钥匙")) or (not has_item("past", "钥匙"))
         modern_has_bell = has_bell_any("modern")
         past_has_bell = has_bell_any("past")
+        modern_bell_key = modern_has_bell and has_item("modern", "钥匙")
+        past_bell_needs_send = past_has_bell and not modern_has_bell
         early_bell = not modern_has_bell
         home_ready = team_on_home_timeline("modern") and team_on_home_timeline("past")
         rush_win_ready = modern_has_bell and has_item("modern", "钥匙") and home_ready
@@ -727,6 +729,18 @@ class HeuristicPolicy:
         plan_modern = "Dom Tower｜钟塔" if win_ready else None
         plan_past = "Dom Square｜广场" if win_ready else None
 
+        # Hard rules to reduce indecisive movement in late game.
+        if team == "past" and past_bell_needs_send and any(c["name"] == "Workshop｜工坊" for c in choices):
+            pick_location(team, "Workshop｜工坊")
+            return
+        if modern_bell_key:
+            if team == "modern" and any(c["name"] == "Dom Tower｜钟塔" for c in choices):
+                pick_location(team, "Dom Tower｜钟塔")
+                return
+            if team == "past" and any(c["name"] == "Dom Square｜广场" for c in choices):
+                pick_location(team, "Dom Square｜广场")
+                return
+
         # Hard overrides for aggressive play
         if early_bell:
             if team == "past":
@@ -737,6 +751,17 @@ class HeuristicPolicy:
                     pick_location(team, prefer)
                     return
             if team == "modern":
+                # Before bell reaches modern timeline, accelerate key pipeline first.
+                if not has_item("modern", "钥匙"):
+                    if count_item("modern", "文件") >= 1 and any(c["name"] == "Archive｜档案馆" for c in choices):
+                        pick_location(team, "Archive｜档案馆")
+                        return
+                    if any(c["name"] == "Museum｜博物馆" for c in choices):
+                        pick_location(team, "Museum｜博物馆")
+                        return
+                    if need_stone and any(c["name"] == "Canal｜运河" for c in choices):
+                        pick_location(team, "Canal｜运河")
+                        return
                 if any(c["name"] == "Dom Square｜广场" for c in choices):
                     pick_location(team, "Dom Square｜广场")
                     return
@@ -866,7 +891,7 @@ class HeuristicPolicy:
         current_name = state["location"][team]
         current = next((l for l in locations if l["name"] == current_name), None) if current_name else None
         current_score = score_location(current) if current else -1
-        switch_threshold = 2 if win_ready else 1
+        switch_threshold = 0 if modern_bell_key else 1
         if not current or best_score >= current_score + switch_threshold:
             pick_location(team, best["name"])
 
@@ -893,14 +918,39 @@ class HeuristicPolicy:
         stone_safe = count_item(team, "石头") >= 2 or (team == "modern" and has_item("past", "石头")) or (team == "past" and has_item("modern", "石头"))
         file_safe = count_item(team, "文件") >= 2 or (team == "modern" and has_item("past", "文件")) or (team == "past" and has_item("modern", "文件"))
         key_safe = count_item(team, "钥匙") >= 2 or (team == "modern" and has_item("past", "钥匙")) or (team == "past" and has_item("modern", "钥匙"))
+        need_modern_stone = not has_item("modern", "石头")
+        need_modern_file = not has_item("modern", "文件")
+        need_modern_key = not has_item("modern", "钥匙")
         def pick_for_modern(items):
             if not items:
                 return None
             if not has_bell_any("modern") and "铃铛" in items:
                 return "铃铛"
+            if need_modern_key and "钥匙" in items:
+                return "钥匙"
+            if need_modern_file and "文件" in items:
+                return "文件"
+            if need_modern_stone and "石头" in items:
+                return "石头"
             if "钥匙" in items:
                 return "钥匙"
+            if "文件" in items:
+                return "文件"
+            if "石头" in items:
+                return "石头"
             return random.choice(items)
+        def has_useful_for_modern(items):
+            if not items:
+                return False
+            if not has_bell_any("modern") and "铃铛" in items:
+                return True
+            if need_modern_key and "钥匙" in items:
+                return True
+            if need_modern_file and "文件" in items:
+                return True
+            if need_modern_stone and "石头" in items:
+                return True
+            return False
         ptype = pending["type"]
         if ptype in ("domsquare_modern_ring", "domtower_modern_ring"):
             return handle_choice(team, "ring") if has_bell_any(team) and can_win_now(team) else handle_choice(team, "skip")
@@ -972,10 +1022,7 @@ class HeuristicPolicy:
         if ptype == "event_build_continue_choice":
             if rush_win_ready:
                 return handle_choice(team, "skip")
-            if team == "past" and has_bell_any("past") and not has_bell_any("modern"):
-                return handle_choice(team, "travel_item")
-            carry_to_modern = (not has_item("modern", "石头")) or (not has_item("modern", "文件")) or (not has_item("modern", "钥匙"))
-            if team == "past" and carry_to_modern and state["inventory"][team]:
+            if team == "past" and has_useful_for_modern(state["inventory"][team]):
                 return handle_choice(team, "travel_item")
             return handle_choice(team, "skip")
         if ptype == "event_build_continue_item":
@@ -995,10 +1042,7 @@ class HeuristicPolicy:
         if ptype == "event_memory_choice":
             if rush_win_ready:
                 return handle_choice(team, "gain_bell")
-            if team == "past" and has_bell_any("past") and not has_bell_any("modern"):
-                return handle_choice(team, "travel_item")
-            carry_to_modern = (not has_item("modern", "石头")) or (not has_item("modern", "文件")) or (not has_item("modern", "钥匙"))
-            if team == "past" and carry_to_modern and state["inventory"][team]:
+            if team == "past" and has_useful_for_modern(state["inventory"][team]):
                 return handle_choice(team, "travel_item")
             if not has_bell_any("modern") and not has_bell_any("past"):
                 return handle_choice(team, "gain_bell")
@@ -1019,15 +1063,16 @@ class HeuristicPolicy:
                 return handle_choice(team, "freeze_past")
             return handle_choice(team, "gain_stone")
         if ptype == "event_city_error_choice":
+            if rush_win_ready and count_item(team, "石头") >= 1:
+                return handle_choice(team, "lose_stone")
+            if team == "past":
+                if has_useful_for_modern(state["inventory"][team]):
+                    return handle_choice(team, "send_item")
+                if not state["inventory"][team] and stone_safe and count_item(team, "石头") >= 1:
+                    return handle_choice(team, "lose_stone")
+                return handle_choice(team, "send_item")
             if rush_win_ready:
                 return handle_choice(team, "lose_stone" if count_item(team, "石头") >= 1 else "send_item")
-            if team == "past" and has_bell_any("past") and not has_bell_any("modern"):
-                return handle_choice(team, "send_item")
-            carry_to_modern = (not has_item("modern", "石头")) or (not has_item("modern", "文件")) or (not has_item("modern", "钥匙"))
-            if team == "past" and carry_to_modern:
-                return handle_choice(team, "send_item")
-            if stone_safe:
-                return handle_choice(team, "lose_stone")
             return handle_choice(team, "send_item")
         if ptype == "event_city_error_item":
             items = state["inventory"][team]

@@ -499,6 +499,17 @@ h2 {
   margin-top: 12px;
 }
 
+.current-effect {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(25, 211, 158, 0.28);
+  background: rgba(25, 211, 158, 0.1);
+  color: #c8ffe3;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .actions.actions-muted {
   opacity: 0.62;
   filter: saturate(0.72);

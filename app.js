@@ -388,6 +388,8 @@ const elements = {
   pastPlayers: document.getElementById("pastPlayers"),
   modernActions: document.getElementById("modernActions"),
   pastActions: document.getElementById("pastActions"),
+  modernEffect: document.getElementById("modernEffect"),
+  pastEffect: document.getElementById("pastEffect"),
   modernPanel: document.getElementById("modernPanel"),
   pastPanel: document.getElementById("pastPanel"),
   playGrid: document.getElementById("playGrid"),
@@ -861,6 +863,14 @@ function locationTimingLabel(name) {
   return "后置自动（事件后）";
 }
 
+function currentLocationEffect(team) {
+  const name = state.location[team];
+  if (!name) return "未翻开地点";
+  const loc = locations.find((entry) => entry.name === name);
+  if (!loc) return "待定";
+  return team === "modern" ? loc.modern || "待定" : loc.past || "待定";
+}
+
 function render() {
   normalizeBells();
   elements.status.textContent = state.winner
@@ -895,6 +905,8 @@ function render() {
 
   elements.modernLocation.textContent = state.location.modern || "未选择";
   elements.pastLocation.textContent = state.location.past || "未选择";
+  if (elements.modernEffect) elements.modernEffect.textContent = `当前地点效果：${currentLocationEffect("modern")}`;
+  if (elements.pastEffect) elements.pastEffect.textContent = `当前地点效果：${currentLocationEffect("past")}`;
 
   elements.modernInventory.innerHTML = renderInventory(state.inventory.modern);
   elements.pastInventory.innerHTML = renderInventory(state.inventory.past);

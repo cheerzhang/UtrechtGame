@@ -26,42 +26,47 @@
       <div class="status" id="status">加载中…</div>
     </header>
 
-    <section class="panel mobile-view control-panel" data-mobile-view="play" id="playerSetupPanel">
-      <h2>玩家设置</h2>
-      <div class="setup-row">
-        <div class="label">总玩家人数</div>
-        <input class="input" id="playerCountInput" type="number" min="1" max="10" value="4" />
-        <button class="btn" id="applyPlayersBtn">应用并开局</button>
-        <div class="setup-hint" id="playerHint">奇数时现代组多1人。</div>
-      </div>
-    </section>
+    <div class="controls-layout mobile-view" data-mobile-view="play">
+      <section class="panel control-panel" id="playerSetupPanel">
+        <h2>玩家设置</h2>
+        <div class="setup-row">
+          <div class="label">总玩家人数</div>
+          <input class="input" id="playerCountInput" type="number" min="1" max="10" value="4" />
+          <button class="btn" id="applyPlayersBtn">应用并开局</button>
+          <div class="setup-hint" id="playerHint">奇数时现代组多1人。</div>
+        </div>
+      </section>
 
-    <section class="panel mobile-view control-panel" data-mobile-view="play" id="autoPanel">
-      <h2>自动演示</h2>
-      <div class="auto-controls">
-        <div class="auto-status" id="autoStatus">已暂停</div>
-        <button class="btn" id="autoToggleBtn">开始自动演示</button>
-        <button class="btn ghost" id="autoResetBtn">重置并暂停</button>
-      </div>
-      <div class="steps" id="autoSteps">
-        <div class="step" data-step="modern_pick">1 现代组选地点</div>
-        <div class="step" data-step="modern_event">2 现代组抽事件</div>
-        <div class="step" data-step="past_pick">3 过去组选地点</div>
-        <div class="step" data-step="past_event">4 过去组抽事件</div>
-      </div>
-    </section>
+      <section class="panel control-panel" id="autoPanel">
+        <h2>自动演示</h2>
+        <div class="auto-controls">
+          <div class="auto-status" id="autoStatus">已暂停</div>
+          <button class="btn" id="autoToggleBtn">开始自动演示</button>
+          <button class="btn ghost" id="autoResetBtn">重置并暂停</button>
+        </div>
+        <div class="steps" id="autoSteps">
+          <div class="step" data-step="modern_pick">1 现代组选地点</div>
+          <div class="step" data-step="modern_event">2 现代组抽事件</div>
+          <div class="step" data-step="past_pick">3 过去组选地点</div>
+          <div class="step" data-step="past_event">4 过去组抽事件</div>
+        </div>
+      </section>
+    </div>
 
     <section class="panel timeline mobile-view" data-mobile-view="play">
-      <div class="dial">
-        <div class="dial-ring"></div>
-        <div class="dial-orb orb-modern" id="orbModern"></div>
-        <div class="dial-orb orb-past" id="orbPast"></div>
-        <div class="dial-center">
-          <div class="marker marker-modern" id="markerModern">现代</div>
-          <div class="marker marker-past" id="markerPast">过去</div>
-          <div class="sync-badge" id="syncBadge">未同步</div>
+      <div class="timeline-layout">
+        <div class="dial">
+          <div class="dial-ring"></div>
+          <div class="dial-orb orb-modern" id="orbModern"></div>
+          <div class="dial-orb orb-past" id="orbPast"></div>
+          <div class="dial-center">
+            <div class="marker marker-modern" id="markerModern">现代</div>
+            <div class="marker marker-past" id="markerPast">过去</div>
+            <div class="sync-badge" id="syncBadge">未同步</div>
+          </div>
+          <div class="dial-labels" id="dialLabels"></div>
         </div>
-        <div class="dial-labels" id="dialLabels"></div>
+        <div class="time-track" id="timeTrack"></div>
       </div>
     </section>
 

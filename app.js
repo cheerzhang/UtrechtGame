@@ -42,6 +42,12 @@ const locations = [
 ];
 
 const items = ["石头", "文件", "钥匙", "铃铛"];
+const itemIcons = {
+  石头: "🪨",
+  文件: "📄",
+  钥匙: "🔑",
+  铃铛: "🔔",
+};
 
 const eventDeck = [
   {
@@ -373,6 +379,7 @@ const elements = {
   orbModern: document.getElementById("orbModern"),
   orbPast: document.getElementById("orbPast"),
   syncBadge: document.getElementById("syncBadge"),
+  timeTrack: document.getElementById("timeTrack"),
   modernLocation: document.getElementById("modernLocation"),
   pastLocation: document.getElementById("pastLocation"),
   modernInventory: document.getElementById("modernInventory"),
@@ -406,6 +413,36 @@ function initDial() {
     span.textContent = slot;
     span.style.transform = `rotate(${dialAngles[i]}deg) translate(0, -118px) rotate(-${dialAngles[i]}deg)`;
     elements.dialLabels.appendChild(span);
+  });
+}
+
+function initTimeTrack() {
+  if (!elements.timeTrack) return;
+  elements.timeTrack.innerHTML = timeSlots
+    .map(
+      (slot, idx) => `
+      <div class="time-cell" data-slot="${idx}">
+        <div class="time-slot-label">${slot}</div>
+        <div class="time-slot-bar"></div>
+        <div class="time-slot-teams">
+          <span class="time-team time-team-modern">现</span>
+          <span class="time-team time-team-past">过</span>
+        </div>
+      </div>
+    `
+    )
+    .join("");
+}
+
+function renderTimeTrack() {
+  if (!elements.timeTrack) return;
+  elements.timeTrack.querySelectorAll(".time-cell").forEach((cell) => {
+    const idx = Number(cell.dataset.slot);
+    const modernHere = state.time.modern === idx;
+    const pastHere = state.time.past === idx;
+    cell.classList.toggle("is-modern", modernHere);
+    cell.classList.toggle("is-past", pastHere);
+    cell.classList.toggle("is-both", modernHere && pastHere);
   });
 }
 
@@ -854,6 +891,7 @@ function render() {
     elements.orbPast.style.transform = `rotate(${pastAngle}deg) translate(0, -${pastRadius}px)`;
     elements.orbPast.classList.toggle("is-overlap", synced);
   }
+  renderTimeTrack();
 
   elements.modernLocation.textContent = state.location.modern || "未选择";
   elements.pastLocation.textContent = state.location.past || "未选择";
@@ -933,7 +971,16 @@ function renderInventory(list) {
   const order = ["石头", "文件", "钥匙", "铃铛"];
   return order
     .filter((item) => counts[item] > 0)
-    .map((item) => `<span class="token">${item}×${counts[item]}</span>`)
+    .map((item) => {
+      const count = counts[item];
+      const icon = itemIcons[item] || item;
+      return `
+        <span class="token token-icon" title="${item}×${count}" aria-label="${item}×${count}">
+          <span class="token-glyph">${icon}</span>
+          <span class="token-count">${count}</span>
+        </span>
+      `;
+    })
     .join("");
 }
 
@@ -1750,6 +1797,7 @@ function resetGame() {
 }
 
 initDial();
+initTimeTrack();
 initMobileViews();
 resetGame();
 

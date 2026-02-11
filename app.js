@@ -1037,8 +1037,19 @@ function renderAutoSteps() {
     elements.autoStatus.textContent = state.auto.running ? "运行中" : "已暂停";
   }
   if (elements.autoToggleBtn) {
-    elements.autoToggleBtn.textContent = state.auto.running ? "暂停自动演示" : "开始自动演示";
+    const resumeLabel = hasProgressState() ? "继续自动演示" : "开始自动演示";
+    elements.autoToggleBtn.textContent = state.auto.running ? "暂停自动演示" : resumeLabel;
   }
+}
+
+function hasProgressState() {
+  if (state.totalDraws > 0 || state.totalRounds > 0) return true;
+  if (state.location.modern || state.location.past) return true;
+  if (state.inventory.modern.length || state.inventory.past.length) return true;
+  if (state.pendingChoice.modern || state.pendingChoice.past) return true;
+  if (state.lastEventFocus) return true;
+  if (state.time.modern !== 0 || state.time.past !== 0) return true;
+  return false;
 }
 
 function renderActions(team) {
@@ -2036,11 +2047,7 @@ function autoTick() {
     render();
     return;
   }
-  if (!state.configured) {
-    applyPlayerCount(Number(elements.playerCountInput.value || 4));
-    resetGame();
-    return;
-  }
+  if (!state.configured) return;
   const team = state.phase.startsWith("modern") ? "modern" : "past";
   const pendingTeam = state.pendingChoice[team] ? team : state.pendingChoice[otherTeam(team)] ? otherTeam(team) : null;
   if (pendingTeam) {
@@ -2273,8 +2280,15 @@ function autoTick() {
 
 function startAuto() {
   if (state.auto.running) return;
+  if (!state.configured) {
+    applyPlayerCount(Number(elements.playerCountInput.value || 4));
+    resetGame();
+  } else if (hasProgressState()) {
+    logEntry("自动演示已接管当前局面，将基于现有残局继续决策。");
+  }
   state.auto.running = true;
   state.auto.timer = setInterval(autoTick, state.auto.interval);
+  autoTick();
   render();
 }
 

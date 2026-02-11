@@ -1,4 +1,5 @@
 const timeSlots = ["清晨", "上午", "正午", "傍晚", "深夜"];
+const dialAngles = [270, 342, 54, 126, 198];
 
 const locations = [
   {
@@ -40,7 +41,6 @@ const locations = [
 ];
 
 const items = ["石头", "文件", "钥匙", "铃铛"];
-const RECORDER_STORAGE_KEY = "utrecht_manual_strategy_records_v1";
 
 const eventDeck = [
   {
@@ -361,15 +361,16 @@ const state = {
   totalDraws: 0,
   totalRounds: 0,
   beforeEventApplied: { modern: false, past: false },
-  recorder: { enabled: false, sessionId: null, records: [], exportHandle: null },
 };
 
 const elements = {
   status: document.getElementById("status"),
-  timeSlots: document.getElementById("timeSlots"),
   dialLabels: document.getElementById("dialLabels"),
   markerModern: document.getElementById("markerModern"),
   markerPast: document.getElementById("markerPast"),
+  orbModern: document.getElementById("orbModern"),
+  orbPast: document.getElementById("orbPast"),
+  syncBadge: document.getElementById("syncBadge"),
   modernLocation: document.getElementById("modernLocation"),
   pastLocation: document.getElementById("pastLocation"),
   modernInventory: document.getElementById("modernInventory"),
@@ -391,20 +392,14 @@ const elements = {
   autoToggleBtn: document.getElementById("autoToggleBtn"),
   autoResetBtn: document.getElementById("autoResetBtn"),
   autoSteps: document.getElementById("autoSteps"),
-  recorderStatus: document.getElementById("recorderStatus"),
-  recorderToggleBtn: document.getElementById("recorderToggleBtn"),
-  recorderExportBtn: document.getElementById("recorderExportBtn"),
-  recorderClearBtn: document.getElementById("recorderClearBtn"),
-  recorderMeta: document.getElementById("recorderMeta"),
 };
 
 function initDial() {
   elements.dialLabels.innerHTML = "";
-  const angles = [270, 342, 54, 126, 198];
   timeSlots.forEach((slot, i) => {
     const span = document.createElement("span");
     span.textContent = slot;
-    span.style.transform = `rotate(${angles[i]}deg) translate(0, -118px) rotate(-${angles[i]}deg)`;
+    span.style.transform = `rotate(${dialAngles[i]}deg) translate(0, -118px) rotate(-${dialAngles[i]}deg)`;
     elements.dialLabels.appendChild(span);
   });
 }
@@ -412,159 +407,6 @@ function initDial() {
 function logEntry(text) {
   state.log.unshift({ text, ts: new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }) });
   if (state.log.length > 20) state.log.pop();
-}
-
-function newRecorderSessionId() {
-  return `session_${Date.now()}`;
-}
-
-function itemCounts(list) {
-  const counts = { 石头: 0, 文件: 0, 钥匙: 0, 铃铛: 0 };
-  list.forEach((item) => {
-    if (counts[item] !== undefined) counts[item] += 1;
-  });
-  return counts;
-}
-
-function recorderSnapshot() {
-  return {
-    phase: state.phase,
-    winner: state.winner,
-    time: { ...state.time },
-    location: { ...state.location },
-    playerPos: {
-      modern: { ...state.playerPos.modern },
-      past: { ...state.playerPos.past },
-    },
-    inventory: {
-      modern: [...state.inventory.modern],
-      past: [...state.inventory.past],
-    },
-    inventoryCounts: {
-      modern: itemCounts(state.inventory.modern),
-      past: itemCounts(state.inventory.past),
-    },
-    pendingChoice: {
-      modern: state.pendingChoice.modern ? state.pendingChoice.modern.type : null,
-      past: state.pendingChoice.past ? state.pendingChoice.past.type : null,
-    },
-    totalDraws: state.totalDraws,
-    totalRounds: state.totalRounds,
-  };
-}
-
-function saveRecorderData() {
-  try {
-    localStorage.setItem(
-      RECORDER_STORAGE_KEY,
-      JSON.stringify({
-        sessionId: state.recorder.sessionId,
-        records: state.recorder.records,
-      })
-    );
-  } catch (_err) {}
-}
-
-function loadRecorderData() {
-  try {
-    const raw = localStorage.getItem(RECORDER_STORAGE_KEY);
-    if (!raw) return;
-    const parsed = JSON.parse(raw);
-    state.recorder.sessionId = parsed && parsed.sessionId ? parsed.sessionId : null;
-    state.recorder.records = Array.isArray(parsed && parsed.records) ? parsed.records : [];
-  } catch (_err) {
-    state.recorder.sessionId = null;
-    state.recorder.records = [];
-  }
-}
-
-function renderRecorderStatus() {
-  if (!elements.recorderStatus) return;
-  const count = state.recorder.records.length;
-  elements.recorderStatus.textContent = state.recorder.enabled ? "记录中" : "未记录";
-  if (elements.recorderToggleBtn) {
-    elements.recorderToggleBtn.textContent = state.recorder.enabled ? "停止记录" : "开始记录";
-  }
-  if (elements.recorderMeta) {
-    const sid = state.recorder.sessionId || "-";
-    elements.recorderMeta.textContent = `记录条数：${count} · 会话：${sid}`;
-  }
-}
-
-function recordManualAction(team, action, data, before, after) {
-  if (!state.recorder.enabled) return;
-  const entry = {
-    id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-    ts: new Date().toISOString(),
-    sessionId: state.recorder.sessionId,
-    team,
-    action,
-    choice: data && data.choice ? data.choice : null,
-    item: data && data.item ? data.item : null,
-    location: data && data.location ? data.location : null,
-    before,
-    after,
-  };
-  state.recorder.records.push(entry);
-  if (state.recorder.records.length > 5000) state.recorder.records.shift();
-  saveRecorderData();
-}
-
-async function exportRecorderData() {
-  if (!state.recorder.records.length) {
-    logEntry("暂无策略记录可导出。");
-    render();
-    return false;
-  }
-  const exportedAt = new Date().toISOString();
-  const payload = {
-    exportedAt,
-    totalRecords: state.recorder.records.length,
-    sessionId: state.recorder.sessionId,
-    records: state.recorder.records,
-  };
-  const content = JSON.stringify(payload, null, 2);
-  if (window.showSaveFilePicker) {
-    try {
-      if (!state.recorder.exportHandle) {
-        state.recorder.exportHandle = await window.showSaveFilePicker({
-          suggestedName: "manual_strategy_records.latest.json",
-          types: [
-            {
-              description: "JSON Files",
-              accept: { "application/json": [".json"] },
-            },
-          ],
-        });
-      }
-      const writable = await state.recorder.exportHandle.createWritable();
-      await writable.write(content);
-      await writable.close();
-      logEntry(`已写入项目记录文件：${state.recorder.exportHandle.name}。`);
-      render();
-      return true;
-    } catch (err) {
-      if (err && err.name === "AbortError") {
-        logEntry("已取消文件写入。");
-        render();
-        return false;
-      }
-      state.recorder.exportHandle = null;
-    }
-  }
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  const stamp = exportedAt.replace(/[:.]/g, "-");
-  a.href = url;
-  a.download = `manual_strategy_records_${stamp}.json`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-  logEntry(`已下载策略记录（${payload.totalRecords}条）。`);
-  render();
-  return true;
 }
 
 function otherTeam(team) {
@@ -948,25 +790,28 @@ function render() {
 
   renderPlayerStatus();
   renderAutoSteps();
-  renderRecorderStatus();
-
-  elements.timeSlots.innerHTML = timeSlots
-    .map((slot, i) => {
-      const classes = ["slot"];
-      if (state.time.modern === i) classes.push("active-modern");
-      if (state.time.past === i) classes.push("active-past");
-      return `
-        <div class="${classes.join(" ")}">
-          <div>${slot}</div>
-          ${state.time.modern === i ? '<div class="tag">现代</div>' : ""}
-          ${state.time.past === i ? '<div class="tag">过去</div>' : ""}
-        </div>
-      `;
-    })
-    .join("");
 
   elements.markerModern.textContent = `现代 · ${timeSlots[state.time.modern]}`;
   elements.markerPast.textContent = `过去 · ${timeSlots[state.time.past]}`;
+  if (elements.syncBadge) {
+    const synced = state.time.modern === state.time.past;
+    elements.syncBadge.textContent = synced ? "时间已同步" : "时间未同步";
+    elements.syncBadge.classList.toggle("is-synced", synced);
+  }
+  if (elements.orbModern) {
+    const synced = state.time.modern === state.time.past;
+    const modernAngle = dialAngles[state.time.modern] + (synced ? -7 : 0);
+    const modernRadius = synced ? 132 : 126;
+    elements.orbModern.style.transform = `rotate(${modernAngle}deg) translate(0, -${modernRadius}px)`;
+    elements.orbModern.classList.toggle("is-overlap", synced);
+  }
+  if (elements.orbPast) {
+    const synced = state.time.modern === state.time.past;
+    const pastAngle = dialAngles[state.time.past] + (synced ? 7 : 0);
+    const pastRadius = synced ? 116 : 126;
+    elements.orbPast.style.transform = `rotate(${pastAngle}deg) translate(0, -${pastRadius}px)`;
+    elements.orbPast.classList.toggle("is-overlap", synced);
+  }
 
   elements.modernLocation.textContent = state.location.modern || "未选择";
   elements.pastLocation.textContent = state.location.past || "未选择";
@@ -1120,8 +965,6 @@ function bindActions() {
 function handleAction(action, team, data) {
   if (state.winner) return;
   if (state.auto.running) return;
-  const trackable = action !== "pick";
-  const before = trackable && state.recorder.enabled ? recorderSnapshot() : null;
   let handled = false;
 
   if (action === "choice") {
@@ -1149,10 +992,6 @@ function handleAction(action, team, data) {
     return;
   }
 
-  if (handled && state.recorder.enabled && before) {
-    const after = recorderSnapshot();
-    recordManualAction(team, action, data, before, after);
-  }
   if (handled) render();
 }
 
@@ -1840,7 +1679,6 @@ function resetGame() {
   render();
 }
 
-loadRecorderData();
 initDial();
 resetGame();
 
@@ -2327,35 +2165,3 @@ elements.autoResetBtn.addEventListener("click", () => {
   stopAuto();
   resetGame();
 });
-
-if (elements.recorderToggleBtn) {
-  elements.recorderToggleBtn.addEventListener("click", () => {
-    state.recorder.enabled = !state.recorder.enabled;
-    if (state.recorder.enabled) {
-      state.recorder.sessionId = newRecorderSessionId();
-    }
-    if (state.recorder.enabled) {
-      logEntry(`策略记录已开启（会话：${state.recorder.sessionId}）。`);
-    } else {
-      logEntry("策略记录已停止。");
-    }
-    saveRecorderData();
-    render();
-  });
-}
-
-if (elements.recorderExportBtn) {
-  elements.recorderExportBtn.addEventListener("click", async () => {
-    await exportRecorderData();
-  });
-}
-
-if (elements.recorderClearBtn) {
-  elements.recorderClearBtn.addEventListener("click", () => {
-    state.recorder.records = [];
-    state.recorder.sessionId = state.recorder.enabled ? newRecorderSessionId() : null;
-    saveRecorderData();
-    logEntry("策略记录已清空。");
-    render();
-  });
-}

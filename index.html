@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Utrecht Time Echo — 原型</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -12,6 +15,7 @@
       <div>
         <div class="eyebrow">Utrecht Time Echo</div>
         <h1>过去与现代 · 时间回响</h1>
+        <div class="subtitle">协作推演 · 双时间线同步 · 钟声触发胜利</div>
       </div>
       <div class="status" id="status">加载中…</div>
     </header>
@@ -41,27 +45,18 @@
       </div>
     </section>
 
-    <section class="panel">
-      <h2>策略记录器</h2>
-      <div class="auto-controls">
-        <div class="auto-status" id="recorderStatus">未记录</div>
-        <button class="btn" id="recorderToggleBtn">开始记录</button>
-        <button class="btn ghost" id="recorderExportBtn">导出记录（项目文件）</button>
-        <button class="btn ghost" id="recorderClearBtn">清空记录</button>
-      </div>
-      <div class="label" id="recorderMeta">记录条数：0</div>
-    </section>
-
     <section class="panel timeline">
       <div class="dial">
         <div class="dial-ring"></div>
+        <div class="dial-orb orb-modern" id="orbModern"></div>
+        <div class="dial-orb orb-past" id="orbPast"></div>
         <div class="dial-center">
           <div class="marker marker-modern" id="markerModern">现代</div>
           <div class="marker marker-past" id="markerPast">过去</div>
+          <div class="sync-badge" id="syncBadge">未同步</div>
         </div>
         <div class="dial-labels" id="dialLabels"></div>
       </div>
-      <div class="slots" id="timeSlots"></div>
     </section>
 
     <section class="grid">

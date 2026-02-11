@@ -1,5 +1,6 @@
 const timeSlots = ["清晨", "上午", "正午", "傍晚", "深夜"];
 const dialAngles = [270, 342, 54, 126, 198];
+const MOBILE_QUERY = "(max-width: 900px)";
 
 const locations = [
   {
@@ -348,6 +349,7 @@ const state = {
   pendingChoice: { modern: null, past: null },
   winner: null,
   lastEvent: { modern: null, past: null },
+  lastEventFocus: null,
   configured: false,
   totalPlayers: 4,
   teamSize: { modern: 2, past: 2 },
@@ -379,10 +381,12 @@ const elements = {
   pastPlayers: document.getElementById("pastPlayers"),
   modernActions: document.getElementById("modernActions"),
   pastActions: document.getElementById("pastActions"),
+  modernPanel: document.getElementById("modernPanel"),
+  pastPanel: document.getElementById("pastPanel"),
+  playGrid: document.getElementById("playGrid"),
   locationList: document.getElementById("locationList"),
   eventCards: document.getElementById("eventCards"),
-  eventModernCard: document.getElementById("eventModernCard"),
-  eventPastCard: document.getElementById("eventPastCard"),
+  eventFocusCard: document.getElementById("eventFocusCard"),
   eventLog: document.getElementById("eventLog"),
   resetBtn: document.getElementById("resetBtn"),
   playerCountInput: document.getElementById("playerCountInput"),
@@ -392,6 +396,7 @@ const elements = {
   autoToggleBtn: document.getElementById("autoToggleBtn"),
   autoResetBtn: document.getElementById("autoResetBtn"),
   autoSteps: document.getElementById("autoSteps"),
+  mobileNav: document.getElementById("mobileNav"),
 };
 
 function initDial() {
@@ -402,6 +407,42 @@ function initDial() {
     span.style.transform = `rotate(${dialAngles[i]}deg) translate(0, -118px) rotate(-${dialAngles[i]}deg)`;
     elements.dialLabels.appendChild(span);
   });
+}
+
+function setMobileView(view) {
+  const panels = document.querySelectorAll(".mobile-view");
+  const tabs = elements.mobileNav ? elements.mobileNav.querySelectorAll(".mobile-tab") : [];
+  const isMobile = window.matchMedia(MOBILE_QUERY).matches;
+
+  tabs.forEach((btn) => {
+    btn.classList.toggle("is-active", btn.dataset.view === view);
+  });
+  panels.forEach((panel) => {
+    if (!isMobile) {
+      panel.classList.remove("mobile-hidden");
+      return;
+    }
+    panel.classList.toggle("mobile-hidden", panel.dataset.mobileView !== view);
+  });
+}
+
+function initMobileViews() {
+  const mq = window.matchMedia(MOBILE_QUERY);
+  const onChange = () => {
+    const active =
+      elements.mobileNav && elements.mobileNav.querySelector(".mobile-tab.is-active")
+        ? elements.mobileNav.querySelector(".mobile-tab.is-active").dataset.view
+        : "play";
+    setMobileView(active || "play");
+  };
+  if (elements.mobileNav) {
+    elements.mobileNav.querySelectorAll(".mobile-tab").forEach((btn) => {
+      btn.addEventListener("click", () => setMobileView(btn.dataset.view || "play"));
+    });
+  }
+  if (mq.addEventListener) mq.addEventListener("change", onChange);
+  else if (mq.addListener) mq.addListener(onChange);
+  setMobileView("play");
 }
 
 function logEntry(text) {
@@ -574,6 +615,7 @@ function drawEvent(team) {
     logEntry(`该事件由${label(actorTeam)}立即执行（不等待轮次）。`);
   }
   state.lastEvent[team] = card;
+  state.lastEventFocus = { card, drawnBy: team, actorTeam };
   state.inEvent = true;
   if (state.noModifyNextEvent[team]) {
     state.blockItemMods[team] = true;
@@ -838,10 +880,7 @@ function render() {
     })
     .join("");
 
-  const modernCard = state.lastEvent.modern;
-  const pastCard = state.lastEvent.past;
-  renderEventCard(elements.eventModernCard, "现代组", modernCard);
-  renderEventCard(elements.eventPastCard, "过去组", pastCard);
+  renderEventCard(elements.eventFocusCard, state.lastEventFocus);
 
   elements.eventLog.innerHTML = state.log
     .map((entry) => `<div class="log-entry">[${entry.ts}] ${entry.text}</div>`)
@@ -849,8 +888,35 @@ function render() {
 
   elements.modernActions.innerHTML = renderActions("modern");
   elements.pastActions.innerHTML = renderActions("past");
+  applyTeamFocus(getFocusTeam());
 
   bindActions();
+}
+
+function getFocusTeam() {
+  if (state.pendingChoice.modern && !state.pendingChoice.past) return "modern";
+  if (state.pendingChoice.past && !state.pendingChoice.modern) return "past";
+  if (state.phase.startsWith("modern")) return "modern";
+  if (state.phase.startsWith("past")) return "past";
+  return null;
+}
+
+function applyTeamFocus(focusTeam) {
+  const hasFocus = focusTeam === "modern" || focusTeam === "past";
+  if (elements.playGrid) {
+    elements.playGrid.dataset.focusTeam = hasFocus ? focusTeam : "";
+  }
+  [
+    { team: "modern", panel: elements.modernPanel, actions: elements.modernActions },
+    { team: "past", panel: elements.pastPanel, actions: elements.pastActions },
+  ].forEach(({ team, panel, actions }) => {
+    if (!panel || !actions) return;
+    const active = hasFocus && focusTeam === team;
+    const dim = hasFocus && focusTeam !== team;
+    panel.classList.toggle("team-active", active);
+    panel.classList.toggle("team-dim", dim);
+    actions.classList.toggle("actions-muted", dim);
+  });
 }
 
 function normalizeBells() {
@@ -879,22 +945,25 @@ function renderPlayerStatus() {
   elements.pastPlayers.textContent = `玩家：${state.teamSize.past}（现代${p.modern} / 过去${p.past}）`;
 }
 
-function renderEventCard(target, teamLabel, card) {
+function renderEventCard(target, payload) {
   if (!target) return;
-  target.className = "event-card";
-  if (!card) {
+  target.className = "event-card event-card--focus";
+  if (!payload || !payload.card) {
     target.innerHTML = `
-      <div class="event-meta">${teamLabel}</div>
+      <div class="event-meta">等待抽卡</div>
       <div class="event-title">尚未抽取</div>
       <div class="event-text">等待抽事件卡。</div>
     `;
     return;
   }
+  const { card, drawnBy, actorTeam } = payload;
   const timeline = card.targetTeam === "past" ? "过去事件" : "现代事件";
   const toneClass = card.targetTeam === "past" ? "event-card--past" : "event-card--modern";
+  const actorLabel = label(actorTeam);
+  const drawLabel = label(drawnBy);
   target.classList.add(toneClass);
   target.innerHTML = `
-    <div class="event-meta">${teamLabel} · <span class="event-tone">${timeline}</span></div>
+    <div class="event-meta">${drawLabel}抽到 · ${actorLabel}执行 · <span class="event-tone">${timeline}</span></div>
     <div class="event-title">${card.title}</div>
     <div class="event-text">${card.text}</div>
   `;
@@ -1660,6 +1729,7 @@ function resetGame() {
   state.phase = "modern_pick";
   state.winner = null;
   state.lastEvent = { modern: null, past: null };
+  state.lastEventFocus = null;
   state.log = [];
   if (state.configured) {
     state.playerPos = {
@@ -1680,6 +1750,7 @@ function resetGame() {
 }
 
 initDial();
+initMobileViews();
 resetGame();
 
 elements.resetBtn.addEventListener("click", () => {
@@ -2165,3 +2236,9 @@ elements.autoResetBtn.addEventListener("click", () => {
   stopAuto();
   resetGame();
 });
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js").catch(() => {});
+  });
+}

@@ -3,10 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0c1328" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>Utrecht Time Echo — 原型</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icons/icon.svg" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -20,7 +26,7 @@
       <div class="status" id="status">加载中…</div>
     </header>
 
-    <section class="panel">
+    <section class="panel mobile-view control-panel" data-mobile-view="play" id="playerSetupPanel">
       <h2>玩家设置</h2>
       <div class="setup-row">
         <div class="label">总玩家人数</div>
@@ -30,7 +36,7 @@
       </div>
     </section>
 
-    <section class="panel">
+    <section class="panel mobile-view control-panel" data-mobile-view="play" id="autoPanel">
       <h2>自动演示</h2>
       <div class="auto-controls">
         <div class="auto-status" id="autoStatus">已暂停</div>
@@ -45,7 +51,7 @@
       </div>
     </section>
 
-    <section class="panel timeline">
+    <section class="panel timeline mobile-view" data-mobile-view="play">
       <div class="dial">
         <div class="dial-ring"></div>
         <div class="dial-orb orb-modern" id="orbModern"></div>
@@ -59,8 +65,8 @@
       </div>
     </section>
 
-    <section class="grid">
-      <div class="panel">
+    <section class="grid mobile-view" data-mobile-view="play" id="playGrid">
+      <div class="panel" id="modernPanel">
         <h2>现代组</h2>
         <div class="player-status" id="modernPlayers"></div>
         <div class="row">
@@ -76,7 +82,18 @@
       <div class="actions" id="modernActions"></div>
       </div>
 
-      <div class="panel">
+      <div class="panel event-spotlight-panel" id="eventSpotlightPanel">
+        <h2>事件焦点</h2>
+        <div class="event-cards event-cards--single" id="eventCards">
+          <div class="event-card event-card--focus" id="eventFocusCard">
+            <div class="event-meta">等待抽卡</div>
+            <div class="event-title">尚未抽取</div>
+            <div class="event-text">抽到事件后，会在这里显示最新一张。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" id="pastPanel">
         <h2>过去组</h2>
         <div class="player-status" id="pastPlayers"></div>
         <div class="row">
@@ -93,28 +110,12 @@
       </div>
     </section>
 
-    <section class="panel">
+    <section class="panel mobile-view" data-mobile-view="ref">
       <h2>地点卡</h2>
       <div class="locations" id="locationList"></div>
     </section>
 
-    <section class="panel">
-      <h2>事件卡</h2>
-      <div class="event-cards" id="eventCards">
-        <div class="event-card" id="eventModernCard">
-          <div class="event-meta">现代组</div>
-          <div class="event-title">尚未抽取</div>
-          <div class="event-text">等待抽事件卡。</div>
-        </div>
-        <div class="event-card" id="eventPastCard">
-          <div class="event-meta">过去组</div>
-          <div class="event-title">尚未抽取</div>
-          <div class="event-text">等待抽事件卡。</div>
-        </div>
-      </div>
-    </section>
-
-    <section class="panel">
+    <section class="panel mobile-view" data-mobile-view="log">
       <h2>事件记录</h2>
       <div class="log" id="eventLog"></div>
     </section>
@@ -123,6 +124,11 @@
       <button class="btn ghost" id="resetBtn">重置游戏</button>
     </footer>
   </div>
+  <nav class="mobile-nav" id="mobileNav">
+    <button class="mobile-tab is-active" data-view="play">对局</button>
+    <button class="mobile-tab" data-view="ref">参考</button>
+    <button class="mobile-tab" data-view="log">记录</button>
+  </nav>
 
   <script src="app.js"></script>
 </body>

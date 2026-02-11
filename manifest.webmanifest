@@ -1,0 +1,19 @@
+{
+  "name": "Utrecht Time Echo",
+  "short_name": "Time Echo",
+  "description": "双时间线协作策略游戏",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0c1328",
+  "theme_color": "#0c1328",
+  "icons": [
+    {
+      "src": "./icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

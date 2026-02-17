@@ -1056,8 +1056,10 @@ function renderActions(team) {
   const isModern = team === "modern";
   const canAct = !state.winner && ((isModern && state.phase.startsWith("modern")) || (!isModern && state.phase.startsWith("past")));
   const canPick = canAct && state.phase.endsWith("pick");
-  const canEvent = canAct && state.phase.endsWith("event") && !state.eventDrawn[team];
-  const canDoPreLocation = canEvent && !state.beforeEventApplied[team] && hasPreEventLocationAction(team);
+  const canEventPhase = canAct && state.phase.endsWith("event") && !state.eventDrawn[team];
+  const preReady = state.beforeEventApplied[team] || !hasPreEventLocationAction(team);
+  const canEvent = canEventPhase && preReady;
+  const canDoPreLocation = canEventPhase && !state.beforeEventApplied[team] && hasPreEventLocationAction(team);
   const canNext = canAct && (state.phase.endsWith("pick") || state.eventDrawn[team]);
   const pendingChoice = state.pendingChoice[team];
   const currentLoc = state.location[team];
@@ -1119,6 +1121,14 @@ function handleAction(action, team, data) {
     handled = true;
   } else if (action === "event") {
     if (state.eventDrawn[team]) return;
+    if (!state.beforeEventApplied[team] && hasPreEventLocationAction(team)) {
+      triggerPreEventLocationAction(team);
+      handled = true;
+      if (state.pendingChoice[team]) {
+        if (handled) render();
+        return;
+      }
+    }
     drawEvent(team);
     handled = true;
   } else if (action === "bell") {

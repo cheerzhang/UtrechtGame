@@ -369,6 +369,7 @@ const state = {
   totalDraws: 0,
   totalRounds: 0,
   beforeEventApplied: { modern: false, past: false },
+  drawnEventIndices: new Set(),
 };
 
 const elements = {
@@ -396,6 +397,7 @@ const elements = {
   locationList: document.getElementById("locationList"),
   eventCards: document.getElementById("eventCards"),
   eventFocusCard: document.getElementById("eventFocusCard"),
+  eventDrawStats: document.getElementById("eventDrawStats"),
   eventLog: document.getElementById("eventLog"),
   resetBtn: document.getElementById("resetBtn"),
   playerCountInput: document.getElementById("playerCountInput"),
@@ -647,7 +649,18 @@ function label(team) {
 
 function drawEvent(team) {
   if (state.pendingChoice.modern || state.pendingChoice.past) return;
-  const card = eventDeck[Math.floor(Math.random() * eventDeck.length)];
+  const remainingEventIndices = [];
+  for (let i = 0; i < eventDeck.length; i += 1) {
+    if (!state.drawnEventIndices.has(i)) remainingEventIndices.push(i);
+  }
+  if (!remainingEventIndices.length) {
+    logEntry("24张事件卡已全部抽完，本轮不再抽取。");
+    state.eventDrawn[team] = true;
+    return;
+  }
+  const pickedIndex = remainingEventIndices[Math.floor(Math.random() * remainingEventIndices.length)];
+  state.drawnEventIndices.add(pickedIndex);
+  const card = eventDeck[pickedIndex];
   const actorTeam = card.targetTeam || team;
   logEntry(`${label(team)}抽到事件：${card.title}（${card.text}）`);
   if (actorTeam !== team) {
@@ -931,6 +944,7 @@ function render() {
     .join("");
 
   renderEventCard(elements.eventFocusCard, state.lastEventFocus);
+  renderEventDrawStats();
 
   elements.eventLog.innerHTML = state.log
     .map((entry) => `<div class="log-entry">[${entry.ts}] ${entry.text}</div>`)
@@ -941,6 +955,25 @@ function render() {
   applyTeamFocus(getFocusTeam());
 
   bindActions();
+}
+
+function renderEventDrawStats() {
+  if (!elements.eventDrawStats) return;
+  let modern = 0;
+  let past = 0;
+  state.drawnEventIndices.forEach((idx) => {
+    const card = eventDeck[idx];
+    if (!card) return;
+    if (card.targetTeam === "past") past += 1;
+    else modern += 1;
+  });
+  const total = state.drawnEventIndices.size;
+  const remaining = eventDeck.length - total;
+  elements.eventDrawStats.innerHTML = `
+    <span class="event-stat-chip event-stat-chip--modern">现代已抽 ${modern}</span>
+    <span class="event-stat-chip event-stat-chip--past">过去已抽 ${past}</span>
+    <span class="event-stat-chip">剩余 ${remaining}</span>
+  `;
 }
 
 function getFocusTeam() {
@@ -1825,6 +1858,7 @@ function resetGame() {
   state.beforeEventApplied = { modern: false, past: false };
   state.totalDraws = 0;
   state.totalRounds = 0;
+  state.drawnEventIndices = new Set();
   logEntry("新游戏开始。现代与过去同在清晨。\n");
   render();
 }

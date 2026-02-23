@@ -41,6 +41,7 @@ state = {
     "phase": "modern_pick",
     "lockBy": None,
     "beforeEventApplied": {"modern": False, "past": False},
+    "drawnEventIndices": set(),
 }
 
 
@@ -463,7 +464,13 @@ for idx, card in enumerate(event_cards):
 def draw_event(team):
     if state["pendingChoice"]["modern"] or state["pendingChoice"]["past"]:
         return
-    card = random.choice(event_cards)
+    remaining_indices = [idx for idx in range(len(event_cards)) if idx not in state["drawnEventIndices"]]
+    if not remaining_indices:
+        state["eventDrawn"][team] = True
+        return
+    picked_idx = random.choice(remaining_indices)
+    state["drawnEventIndices"].add(picked_idx)
+    card = event_cards[picked_idx]
     actor_team = card.get("targetTeam", team)
     state["lastEvent"][team] = card
     state["inEvent"] = True
@@ -555,6 +562,7 @@ def reset_game():
     state["beforeEventApplied"] = {"modern": False, "past": False}
     state["totalDraws"] = 0
     state["totalRounds"] = 0
+    state["drawnEventIndices"] = set()
 
 
 def step_with_policy(policy):
@@ -611,17 +619,24 @@ def find_threshold_overall(samples, target_rate, total_games):
 
 def run_batch(policy, games, max_draws, max_rounds):
     wins = 0
+    wins_before_exhaust = 0
     win_draws = []
     win_rounds = []
+    deck_size = len(event_cards)
     for _ in range(games):
         result = run_game(policy, max_draws, max_rounds)
         if result["winner"]:
             wins += 1
+            if result["draws"] < deck_size:
+                wins_before_exhaust += 1
             win_draws.append(result["draws"])
             win_rounds.append(result["rounds"])
     win_rate = wins / games
     return {
         "winRate": win_rate,
+        "winRateBeforeExhaust": wins_before_exhaust / games,
+        "winsBeforeExhaust": wins_before_exhaust,
+        "deckSize": deck_size,
         "winDraws": win_draws,
         "winRounds": win_rounds,
         "p50Draws": percentile(win_draws, 0.5),
@@ -1110,12 +1125,14 @@ def main():
 
     print("随机策略:")
     print(f"  胜率: {random_stats['winRate']*100:.1f}%")
+    print(f"  {random_stats['deckSize']}张抽完前胜率: {random_stats['winRateBeforeExhaust']*100:.1f}% ({random_stats['winsBeforeExhaust']}/{games})")
     print(f"  50%胜利抽卡: {fmt(random_stats['p50Draws'])} 张")
     print(f"  70%胜利抽卡: {fmt(random_stats['drawThreshold70'])} 张")
     print(f"  50%胜利轮数: {fmt(random_stats['p50Rounds'])} 轮")
     print(f"  70%胜利轮数: {fmt(random_stats['roundThreshold70'])} 轮")
     print("\n启发式策略:")
     print(f"  胜率: {heuristic_stats['winRate']*100:.1f}%")
+    print(f"  {heuristic_stats['deckSize']}张抽完前胜率: {heuristic_stats['winRateBeforeExhaust']*100:.1f}% ({heuristic_stats['winsBeforeExhaust']}/{games})")
     print(f"  50%胜利抽卡: {fmt(heuristic_stats['p50Draws'])} 张")
     print(f"  70%胜利抽卡: {fmt(heuristic_stats['drawThreshold70'])} 张")
     print(f"  50%胜利轮数: {fmt(heuristic_stats['p50Rounds'])} 轮")
